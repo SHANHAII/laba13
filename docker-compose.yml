@@ -1,0 +1,76 @@
+version: "3.9"
+
+services:
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: ["--http_port", "8222"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  agent-order:
+    build: ./agent
+    command: ["/agent", "--type", "order", "--nats", "nats://nats:4222", "--log", "/logs/order.log"]
+    depends_on:
+      nats:
+        condition: service_healthy
+    volumes:
+      - ./logs:/logs
+    restart: on-failure
+
+  # Два экземпляра кухонного агента — демонстрация балансировки через NATS queue groups
+  agent-kitchen-1:
+    build: ./agent
+    command: ["/agent", "--type", "kitchen", "--nats", "nats://nats:4222", "--log", "/logs/kitchen-1.log"]
+    depends_on:
+      nats:
+        condition: service_healthy
+    volumes:
+      - ./logs:/logs
+    restart: on-failure
+
+  agent-kitchen-2:
+    build: ./agent
+    command: ["/agent", "--type", "kitchen", "--nats", "nats://nats:4222", "--log", "/logs/kitchen-2.log"]
+    depends_on:
+      nats:
+        condition: service_healthy
+    volumes:
+      - ./logs:/logs
+    restart: on-failure
+
+  agent-table:
+    build: ./agent
+    command: ["/agent", "--type", "table", "--nats", "nats://nats:4222", "--log", "/logs/table.log"]
+    depends_on:
+      nats:
+        condition: service_healthy
+    volumes:
+      - ./logs:/logs
+    restart: on-failure
+
+  agent-delivery:
+    build: ./agent
+    command: ["/agent", "--type", "delivery", "--nats", "nats://nats:4222", "--log", "/logs/delivery.log"]
+    depends_on:
+      nats:
+        condition: service_healthy
+    volumes:
+      - ./logs:/logs
+    restart: on-failure
+
+  api:
+    build: ./orchestrator
+    ports:
+      - "8000:8000"
+    environment:
+      - NATS_URL=nats://nats:4222
+    depends_on:
+      nats:
+        condition: service_healthy
+    restart: on-failure
